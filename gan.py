@@ -12,14 +12,16 @@ The minibatch discrimination technique is taken from Tim Salimans et. al.:
 https://arxiv.org/abs/1606.03498.
 '''
 
+import os
 import argparse
 import numpy as np
+import datetime
 import tensorflow as tf
 import matplotlib.pyplot as plt
 from matplotlib import animation
-import seaborn as sns
+# import seaborn as sns
 
-sns.set(color_codes=True)
+# sns.set(color_codes=True)
 
 seed = 42
 np.random.seed(seed)
@@ -67,7 +69,7 @@ def generator(input, h_dim):
     return h1
 
 
-def discriminator(input, h_dim, minibatch_layer=True):
+def discriminator(input, h_dim, minibatch_layer):
     h0 = tf.nn.relu(linear(input, h_dim * 2, 'd0'))
     h1 = tf.nn.relu(linear(h0, h_dim * 2, 'd1'))
 
@@ -155,7 +157,7 @@ class GAN(object):
         self.opt_g = optimizer(self.loss_g, self.g_params)
 
 
-def train(model, data, gen, params):
+def train(model, data, gen, output_path, params):
     anim_frames = []
 
     with tf.Session() as session:
@@ -180,16 +182,10 @@ def train(model, data, gen, params):
             if step % params.log_every == 0:
                 print('{}: {:.4f}\t{:.4f}'.format(step, loss_d, loss_g))
 
-            if params.anim_path and (step % params.anim_every == 0):
-                anim_frames.append(
-                    samples(model, session, data, gen.range, params.batch_size)
-                )
+            if (step % params.anim_every == 0):
+                samps = samples(model, session, data, gen.range, params.batch_size)
+                plot_distributions(samps, gen.range, save_img_name = output_path+'/{:06}'.format(step))
 
-        if params.anim_path:
-            save_animation(anim_frames, params.anim_path, gen.range)
-        else:
-            samps = samples(model, session, data, gen.range, params.batch_size)
-            plot_distributions(samps, gen.range)
 
 
 def samples(
@@ -244,7 +240,7 @@ def samples(
     return db, pd, pg
 
 
-def plot_distributions(samps, sample_range):
+def plot_distributions(samps, sample_range, save_img_name):
     db, pd, pg = samps
     db_x = np.linspace(-sample_range, sample_range, len(db))
     p_x = np.linspace(-sample_range, sample_range, len(pd))
@@ -257,7 +253,8 @@ def plot_distributions(samps, sample_range):
     plt.xlabel('Data values')
     plt.ylabel('Probability density')
     plt.legend()
-    plt.show()
+    plt.savefig(save_img_name)
+    # plt.show()
 
 
 def save_animation(anim_frames, anim_path, sample_range):
@@ -312,8 +309,12 @@ def save_animation(anim_frames, anim_path, sample_range):
 
 
 def main(args):
+    current_time = datetime.datetime.now().strftime("20%y%m%d_%H%M_%S")
+    output_path = '/tmp/{}_{}_batch{}'.format(current_time, args.minibatch, args.batch_size)
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
     model = GAN(args)
-    train(model, DataDistribution(), GeneratorDistribution(range=8), args)
+    train(model, DataDistribution(), GeneratorDistribution(range=8), output_path, args)
 
 
 def parse_args():
@@ -324,13 +325,13 @@ def parse_args():
                         help='MLP hidden size')
     parser.add_argument('--batch-size', type=int, default=8,
                         help='the batch size')
-    parser.add_argument('--minibatch', action='store_true',
+    parser.add_argument('--minibatch', type=bool, default=True,
                         help='use minibatch discrimination')
     parser.add_argument('--log-every', type=int, default=10,
                         help='print loss after this many steps')
     parser.add_argument('--anim-path', type=str, default=None,
                         help='path to the output animation file')
-    parser.add_argument('--anim-every', type=int, default=1,
+    parser.add_argument('--anim-every', type=int, default=10,
                         help='save every Nth frame for animation')
     return parser.parse_args()
 
